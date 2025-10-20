@@ -7,7 +7,6 @@ export type Category =
   | 'reit'
   | 'fixedDeposit'
   | 'epf'
-  | 'investment'
   | 'other'
   | 'property'
   | 'business'

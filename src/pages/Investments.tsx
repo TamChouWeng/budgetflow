@@ -9,8 +9,6 @@ import {
   calculateAllocation,
   calculateFixedDepositAccrual,
   enrichHoldings,
-  summarizeBusinessBySubcategory,
-
   sumTransactionsByCategory,
   sumTransactionsBySubcategory,
 } from '../lib/calc'
@@ -27,10 +25,8 @@ type AllocationView =
   | 'crypto'
   | 'indexFund'
   | 'reit'
-  | 'investment'
   | 'other'
   | 'epf'
-  | 'business'
 
 const InvestmentsPage = () => {
   const holdings = useBudgetStore((state) => state.holdings)
@@ -94,7 +90,6 @@ const InvestmentsPage = () => {
       | 'indexFund'
       | 'reit'
       | 'fixedDeposit'
-      | 'investment'
       | 'property'
       | 'other'
       | 'epf'
@@ -106,7 +101,6 @@ const InvestmentsPage = () => {
       indexFund: 0,
       reit: 0,
       fixedDeposit: 0,
-      investment: spendTotals.investment,
       property: spendTotals.property,
       other: spendTotals.other,
       epf: spendTotals.epf,
@@ -132,7 +126,6 @@ const InvestmentsPage = () => {
       { category: 'reit', value: totals.reit },
       { category: 'fixedDeposit', value: totals.fixedDeposit },
       { category: 'property', value: totals.property },
-      { category: 'investment', value: totals.investment, label: 'Other' },
       { category: 'other', value: totals.other },
       { category: 'epf', value: totals.epf },
       { category: 'business', value: totals.business },
@@ -147,10 +140,8 @@ const InvestmentsPage = () => {
     { value: 'crypto', label: 'Crypto' },
     { value: 'indexFund', label: 'Index Funds' },
     { value: 'reit', label: 'REITs' },
-    { value: 'investment', label: 'Other investments' },
     { value: 'other', label: 'Other' },
     { value: 'epf', label: 'EPF' },
-    { value: 'business', label: 'Business' },
   ]
 
   const allocation = useMemo(() => {
@@ -174,15 +165,7 @@ const InvestmentsPage = () => {
         })
     }
 
-    if (allocationView === 'business') {
-      summarizeBusinessBySubcategory(transactions, range, settings.baseCurrency, fxRates).forEach(
-        ({ subcategory, total }) => {
-          addSlice(subcategory, total, subcategory)
-        },
-      )
-    }
-
-    const transactionCategories: AllocationView[] = ['investment', 'other', 'epf']
+    const transactionCategories: AllocationView[] = ['other', 'epf']
     if (transactionCategories.includes(allocationView)) {
       sumTransactionsBySubcategory(
         transactions,
@@ -212,14 +195,6 @@ const InvestmentsPage = () => {
     settings.baseCurrency,
     fxRates,
   ])
-
-  const transactionsInRange = useMemo(
-    () =>
-      transactions.filter(
-        (transaction) => transaction.date >= range.from && transaction.date <= range.to,
-      ),
-    [transactions, range],
-  )
 
   return (
     <section className="space-y-8">
@@ -276,72 +251,9 @@ const InvestmentsPage = () => {
         refreshingIds={refreshingIds}
         onRefreshHolding={handleRefreshHolding}
         onRefreshAll={() => refetch()}
-      />
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
-        <h2 className="text-lg font-semibold text-white">Transactions in range</h2>
-        <p className="text-sm text-slate-400">
-          Includes all investment-related cash flows across the selected period.
-        </p>
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-800 text-sm">
-            <thead className="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-400">
-              <tr>
-                <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 font-medium">Category</th>
-                <th className="px-4 py-3 font-medium text-right">Amount</th>
-                <th className="px-4 py-3 font-medium text-right">Base</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/80 text-slate-200">
-              {transactionsInRange
-                .filter((transaction) => transaction.category !== 'business')
-                .map((transaction) => {
-                  const converted =
-                    sumTransactionsByCategory([transaction], range, settings.baseCurrency, fxRates)[
-                      transaction.category
-                    ] ?? 0
-                  return (
-                    <tr key={transaction.id}>
-                      <td className="px-4 py-3 text-xs text-slate-400">
-                        {new Date(transaction.date).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-3">{transaction.name ?? '—'}</td>
-                      <td className="px-4 py-3 uppercase text-slate-400">{transaction.category}</td>
-                      <td className="px-4 py-3 text-right">
-                        {formatCurrency(transaction.amount, transaction.currency)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-300">
-                        {formatCurrency(converted, settings.baseCurrency)}
-                      </td>
-                    </tr>
-                  )
-                })}
-            </tbody>
-          </table>
-          {transactionsInRange.length === 0 ? (
-            <div className="mt-4 rounded-xl border border-dashed border-slate-800/60 bg-slate-900/50 px-4 py-8 text-center text-sm text-slate-400">
-              No transactions recorded in this range.
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </section>
+      />    </section>
   )
 }
 
 export default InvestmentsPage
-
-
-
-
-
-
-
-
-
-
-
-
-
 

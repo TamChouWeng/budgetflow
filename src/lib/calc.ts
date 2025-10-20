@@ -98,7 +98,6 @@ export const sumTransactionsByCategory = (
     reit: 0,
     fixedDeposit: 0,
     epf: 0,
-    investment: 0,
     other: 0,
     property: 0,
     business: 0,

@@ -1,17 +1,41 @@
 import type { ChangeEvent, FormEvent } from 'react'
-import type { Currency } from '../types/models'
+import type { Currency, FixedDepositPosition } from '../types/models'
 import { useEffect, useMemo, useState } from 'react'
+import { ArrowUpDown, X } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { calculateAllocation, calculateFixedDepositAccrual } from '../lib/calc'
+import { calculateAllocation, calculateFixedDepositAccrual, convertCurrency } from '../lib/calc'
 import { createFixedDeposit, useBudgetStore } from '../lib/datastore'
 import { formatCurrency } from '../lib/format'
 import AllocationPie from '../components/AllocationPie'
+
+type FixedDepositDraft = {
+  bank: string
+  name: string
+  principal: string
+  ratePct: string
+  startDate: string
+  maturityDate: string
+  currency: Currency
+}
+
+type PositionSort = 'maturity-desc' | 'maturity-asc' | 'value-desc' | 'value-asc'
+
+const positionSortOptions: Array<{ value: PositionSort; label: string }> = [
+  { value: 'maturity-desc', label: 'Maturity (latest)' },
+  { value: 'maturity-asc', label: 'Maturity (soonest)' },
+  { value: 'value-desc', label: 'Value (high-low)' },
+  { value: 'value-asc', label: 'Value (low-high)' },
+]
+
+const currencyOptions: Currency[] = ['MYR', 'USD']
 
 const FixedDepositsPage = () => {
   const fixedDeposits = useBudgetStore((state) => state.fixedDeposits)
   const fxRates = useBudgetStore((state) => state.fxRates)
   const settings = useBudgetStore((state) => state.settings)
   const addFixedDeposit = useBudgetStore((state) => state.addFixedDeposit)
+  const updateFixedDeposit = useBudgetStore((state) => state.updateFixedDeposit)
+  const removeFixedDeposit = useBudgetStore((state) => state.removeFixedDeposit)
 
   const todayIso = new Date().toISOString().slice(0, 10)
   const [fdForm, setFdForm] = useState({
@@ -27,10 +51,97 @@ const FixedDepositsPage = () => {
     type: 'idle',
   })
 
+  const buildEmptyPositionDraft = (): FixedDepositDraft => ({
+    bank: '',
+    name: '',
+    principal: '',
+    ratePct: '',
+    startDate: todayIso,
+    maturityDate: todayIso,
+    currency: settings.baseCurrency,
+  })
+
+  const [positionEditId, setPositionEditId] = useState<string | null>(null)
+  const [positionDraft, setPositionDraft] = useState<FixedDepositDraft>(() => buildEmptyPositionDraft())
+  const [positionError, setPositionError] = useState<string | null>(null)
+  const [positionSort, setPositionSort] = useState<PositionSort>('maturity-desc')
+  const [positionModalOpen, setPositionModalOpen] = useState(false)
 
   useEffect(() => {
     setFdForm((prev) => ({ ...prev, currency: settings.baseCurrency }))
   }, [settings.baseCurrency])
+
+  const openPositionModal = (position: FixedDepositPosition) => {
+    setPositionEditId(position.id)
+    setPositionDraft({
+      bank: position.bank,
+      name: position.name ?? '',
+      principal: position.principal.toString(),
+      ratePct: position.ratePct.toString(),
+      startDate: position.startDate.slice(0, 10),
+      maturityDate: position.maturityDate.slice(0, 10),
+      currency: position.currency,
+    })
+    setPositionError(null)
+    setPositionModalOpen(true)
+  }
+
+  const closePositionModal = () => {
+    setPositionModalOpen(false)
+    setPositionEditId(null)
+    setPositionDraft(buildEmptyPositionDraft())
+    setPositionError(null)
+  }
+
+  const savePositionDraft = () => {
+    if (!positionEditId) return
+    const bank = positionDraft.bank.trim()
+    const name = positionDraft.name.trim()
+    const principal = Number(positionDraft.principal)
+    const ratePct = Number(positionDraft.ratePct)
+    const startDate = positionDraft.startDate
+    const maturityDate = positionDraft.maturityDate
+    if (!bank) {
+      setPositionError('Bank is required.')
+      return
+    }
+    if (!Number.isFinite(principal) || principal <= 0) {
+      setPositionError('Provide a principal greater than zero.')
+      return
+    }
+    if (!Number.isFinite(ratePct)) {
+      setPositionError('Provide a valid rate.')
+      return
+    }
+    if (!startDate || !maturityDate) {
+      setPositionError('Start and maturity dates are required.')
+      return
+    }
+    if (new Date(maturityDate) < new Date(startDate)) {
+      setPositionError('Maturity date must be on or after the start date.')
+      return
+    }
+    const payload = {
+      bank,
+      name: name || undefined,
+      principal,
+      ratePct,
+      startDate: new Date(startDate).toISOString(),
+      maturityDate: new Date(maturityDate).toISOString(),
+      currency: positionDraft.currency as Currency,
+    }
+    updateFixedDeposit(positionEditId, payload)
+    closePositionModal()
+  }
+
+  const deletePosition = (positionId: string) => {
+    if (window.confirm('Remove this fixed deposit?')) {
+      if (positionEditId === positionId) {
+        closePositionModal()
+      }
+      removeFixedDeposit(positionId)
+    }
+  }
 
   const handleFdFieldChange = (field: keyof typeof fdForm) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFdForm((prev) => ({ ...prev, [field]: event.target.value }))
@@ -98,6 +209,24 @@ const FixedDepositsPage = () => {
     [fixedDeposits, settings.baseCurrency, fxRates],
   )
 
+  const sortedRows = useMemo(() => {
+    const items = [...rows]
+    items.sort((a, b) => {
+      switch (positionSort) {
+        case 'maturity-asc':
+          return new Date(a.position.maturityDate).getTime() - new Date(b.position.maturityDate).getTime()
+        case 'value-desc':
+          return b.accrual.currentValueBase - a.accrual.currentValueBase
+        case 'value-asc':
+          return a.accrual.currentValueBase - b.accrual.currentValueBase
+        case 'maturity-desc':
+        default:
+          return new Date(b.position.maturityDate).getTime() - new Date(a.position.maturityDate).getTime()
+      }
+    })
+    return items
+  }, [rows, positionSort])
+
   const totals = rows.reduce(
     (acc, row) => {
       acc.principal += row.accrual.principalBase
@@ -151,129 +280,151 @@ const FixedDepositsPage = () => {
         title="Fixed deposits"
         description="Track principal balances, accrued interest, and total value at maturity."
       />
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
-        <h2 className="text-lg font-semibold text-white">Add fixed deposit</h2>
-        <p className="text-sm text-slate-400">Record a new placement to keep balances and accruals up to date.</p>
-        <form className="mt-4 grid gap-4 md:grid-cols-2" onSubmit={handleAddFixedDeposit}>
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Bank</span>
-            <input
-              value={fdForm.bank}
-              onChange={handleFdFieldChange('bank')}
-              placeholder="Bank"
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Label</span>
-            <input
-              value={fdForm.name}
-              onChange={handleFdFieldChange('name')}
-              placeholder="Optional name"
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Principal</span>
-            <input
-              value={fdForm.principal}
-              onChange={handleFdFieldChange('principal')}
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="10000"
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Rate (% p.a.)</span>
-            <input
-              value={fdForm.rate}
-              onChange={handleFdFieldChange('rate')}
-              type="number"
-              step="0.01"
-              placeholder="3.50"
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Start date</span>
-            <input
-              value={fdForm.startDate}
-              onChange={handleFdFieldChange('startDate')}
-              type="date"
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Maturity date</span>
-            <input
-              value={fdForm.maturityDate}
-              onChange={handleFdFieldChange('maturityDate')}
-              type="date"
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Currency</span>
-            <select
-              value={fdForm.currency}
-              onChange={(event) => handleFdFieldChange('currency')(event as ChangeEvent<HTMLSelectElement>)}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-            >
-              <option value="MYR">MYR</option>
-              <option value="USD">USD</option>
-            </select>
-          </label>
-          <div className="md:col-span-2 flex items-center gap-4">
-            <button
-              type="submit"
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-            >
-              Save deposit
-            </button>
-            {fdStatus.type === 'success' ? (
-              <span className="text-xs font-semibold uppercase tracking-wide text-emerald-300">{fdStatus.message}</span>
-            ) : null}
-            {fdStatus.type === 'error' ? (
-              <span className="text-xs font-semibold uppercase tracking-wide text-rose-400">{fdStatus.message}</span>
-            ) : null}
-          </div>
-        </form>
-      </div>
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
-        <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-white">Allocation snapshot</h2>
-            <p className="text-sm text-slate-400">
-              Current value in {settings.baseCurrency} grouped by {viewMode === 'bank' ? 'bank' : 'individual deposit'}.
-            </p>
-          </div>
-          <div className="inline-flex gap-2 rounded-xl border border-slate-800 bg-slate-900/60 p-1">
-            {viewOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setViewMode(option.value)}
-                className={[
-                  'rounded-lg px-3 py-1.5 text-sm font-medium transition',
-                  viewMode === option.value
-                    ? 'bg-brand-500/20 text-brand-100'
-                    : 'text-slate-300 hover:text-white',
-                ].join(' ')}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
+          <h2 className="text-lg font-semibold text-white">Add fixed deposit</h2>
+          <p className="text-sm text-slate-400">
+            Record a new placement to keep balances and accruals up to date.
+          </p>
+          <form className="mt-4 grid gap-4 md:grid-cols-2" onSubmit={handleAddFixedDeposit}>
+            <label className="flex flex-col gap-2 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Bank</span>
+              <input
+                value={fdForm.bank}
+                onChange={handleFdFieldChange('bank')}
+                placeholder="Bank"
+                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+              />
+            </label>
+            <label className="flex flex-col gap-2 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Label</span>
+              <input
+                value={fdForm.name}
+                onChange={handleFdFieldChange('name')}
+                placeholder="Optional name"
+                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+              />
+            </label>
+            <label className="flex flex-col gap-2 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Principal</span>
+              <input
+                value={fdForm.principal}
+                onChange={handleFdFieldChange('principal')}
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="10000"
+                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+              />
+            </label>
+            <label className="flex flex-col gap-2 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Rate (% p.a.)</span>
+              <input
+                value={fdForm.rate}
+                onChange={handleFdFieldChange('rate')}
+                type="number"
+                step="0.01"
+                placeholder="3.50"
+                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+              />
+            </label>
+            <label className="flex flex-col gap-2 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Start date</span>
+              <input
+                value={fdForm.startDate}
+                onChange={handleFdFieldChange('startDate')}
+                type="date"
+                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+              />
+            </label>
+            <label className="flex flex-col gap-2 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Maturity date</span>
+              <input
+                value={fdForm.maturityDate}
+                onChange={handleFdFieldChange('maturityDate')}
+                type="date"
+                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+              />
+            </label>
+            <label className="flex flex-col gap-2 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Currency</span>
+              <select
+                value={fdForm.currency}
+                onChange={handleFdFieldChange('currency')}
+                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
               >
-                {option.label}
+                <option value="MYR">MYR</option>
+                <option value="USD">USD</option>
+              </select>
+            </label>
+            <div className="md:col-span-2 flex items-center gap-4">
+              <button
+                type="submit"
+                className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+              >
+                Save deposit
               </button>
-            ))}
-          </div>
+              {fdStatus.type === 'success' ? (
+                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
+                  {fdStatus.message}
+                </span>
+              ) : null}
+              {fdStatus.type === 'error' ? (
+                <span className="text-xs font-semibold uppercase tracking-wide text-rose-400">
+                  {fdStatus.message}
+                </span>
+              ) : null}
+            </div>
+          </form>
         </div>
-        <AllocationPie data={allocationData} currency={settings.baseCurrency} />
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
+          <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Allocation snapshot</h2>
+              <p className="text-sm text-slate-400">
+                Current value in {settings.baseCurrency} grouped by{' '}
+                {viewMode === 'bank' ? 'bank' : 'individual deposit'}.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1 text-right lg:text-left">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">View</span>
+              <select
+                value={viewMode}
+                onChange={(event) => setViewMode(event.target.value as typeof viewMode)}
+                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+              >
+                {viewOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <AllocationPie data={allocationData} currency={settings.baseCurrency} />
+        </div>
       </div>
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
         <h2 className="text-lg font-semibold text-white">Positions</h2>
         <p className="text-sm text-slate-400">
           Latest placements appear here once saved above.
         </p>
+        <div className="mt-4 flex justify-end">
+          <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-2 py-1">
+            <ArrowUpDown className="h-4 w-4 text-slate-400" aria-hidden />
+            <select
+              value={positionSort}
+              onChange={(event) => setPositionSort(event.target.value as PositionSort)}
+              className="rounded-md border border-transparent bg-slate-900 px-2 py-1 text-xs font-medium text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400/40"
+            >
+              {positionSortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-800 text-sm">
             <thead className="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-400">
@@ -286,13 +437,15 @@ const FixedDepositsPage = () => {
                 <th className="px-4 py-3 font-medium text-right">Rate</th>
                 <th className="px-4 py-3 font-medium">Start</th>
                 <th className="px-4 py-3 font-medium">Maturity</th>
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-slate-800/80 text-slate-200">
-              {rows.map(({ position, accrual }) => (
+              {sortedRows.map(({ position, accrual }) => (
                 <tr key={position.id}>
                   <td className="px-4 py-3">{position.bank}</td>
-                  <td className="px-4 py-3 text-slate-300">{position.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-300">{position.name ?? '--'}</td>
                   <td className="px-4 py-3 text-right">
                     {formatCurrency(accrual.principalBase, settings.baseCurrency)}
                   </td>
@@ -311,6 +464,24 @@ const FixedDepositsPage = () => {
                   <td className="px-4 py-3 text-xs text-slate-400">
                     {new Date(position.maturityDate).toLocaleDateString()}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openPositionModal(position)}
+                        className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 hover:border-brand-500 hover:text-brand-200"
+                      >
+                        Modify
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deletePosition(position.id)}
+                        className="rounded-lg border border-rose-500 px-3 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/10"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -328,19 +499,185 @@ const FixedDepositsPage = () => {
                 <td className="px-4 py-3 text-right text-white">
                   {formatCurrency(totals.value, settings.baseCurrency)}
                 </td>
-                <td className="px-4 py-3" colSpan={3}>
+                <td className="px-4 py-3" colSpan={4}>
                   {rows.length} positions
                 </td>
               </tr>
             </tfoot>
           </table>
-          {rows.length === 0 ? (
+          {sortedRows.length === 0 ? (
             <div className="mt-4 rounded-xl border border-dashed border-slate-800/60 bg-slate-900/50 px-4 py-8 text-center text-sm text-slate-400">
-              No fixed deposits yet. Use the form above to add your first placement.
+              No fixed deposits yet. Use the controls above to add your first position.
             </div>
           ) : null}
         </div>
       </div>
+      {positionModalOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/80 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Modify fixed deposit</h3>
+                <p className="text-sm text-slate-400">Update principal, rate, or key dates for this placement.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closePositionModal}
+                className="rounded-lg border border-slate-700 p-1 text-slate-300 transition hover:border-slate-500 hover:text-white"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault()
+                savePositionDraft()
+              }}
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="flex flex-col gap-2 text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Bank</span>
+                  <input
+                    value={positionDraft.bank}
+                    onChange={(event) =>
+                      setPositionDraft((draft) => ({
+                        ...draft,
+                        bank: event.target.value,
+                      }))
+                    }
+                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+                    required
+                  />
+                </label>
+                <label className="flex flex-col gap-2 text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Label</span>
+                  <input
+                    value={positionDraft.name}
+                    onChange={(event) =>
+                      setPositionDraft((draft) => ({
+                        ...draft,
+                        name: event.target.value,
+                      }))
+                    }
+                    placeholder="Optional"
+                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+                  />
+                </label>
+                <label className="flex flex-col gap-2 text-sm sm:col-span-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Principal</span>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <input
+                      value={positionDraft.principal}
+                      onChange={(event) =>
+                        setPositionDraft((draft) => ({
+                          ...draft,
+                          principal: event.target.value,
+                        }))
+                      }
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+                    />
+                    <select
+                      value={positionDraft.currency}
+                      onChange={(event) =>
+                        setPositionDraft((draft) => ({
+                          ...draft,
+                          currency: event.target.value as Currency,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40 sm:w-32"
+                    >
+                      {currencyOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {(() => {
+                    const principalValue = Number(positionDraft.principal)
+                    if (!Number.isFinite(principalValue) || principalValue <= 0) return null
+                    const principalBase = convertCurrency(
+                      principalValue,
+                      positionDraft.currency,
+                      settings.baseCurrency,
+                      fxRates,
+                    )
+                    return (
+                      <span className="text-xs text-slate-400">
+                        ~ {formatCurrency(principalBase, settings.baseCurrency)}
+                      </span>
+                    )
+                  })()}
+                </label>
+                <label className="flex flex-col gap-2 text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Rate (% p.a.)</span>
+                  <input
+                    value={positionDraft.ratePct}
+                    onChange={(event) =>
+                      setPositionDraft((draft) => ({
+                        ...draft,
+                        ratePct: event.target.value,
+                      }))
+                    }
+                    type="number"
+                    step="0.01"
+                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+                  />
+                </label>
+                <label className="flex flex-col gap-2 text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Start date</span>
+                  <input
+                    value={positionDraft.startDate}
+                    onChange={(event) =>
+                      setPositionDraft((draft) => ({
+                        ...draft,
+                        startDate: event.target.value,
+                      }))
+                    }
+                    type="date"
+                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+                  />
+                </label>
+                <label className="flex flex-col gap-2 text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Maturity date</span>
+                  <input
+                    value={positionDraft.maturityDate}
+                    onChange={(event) =>
+                      setPositionDraft((draft) => ({
+                        ...draft,
+                        maturityDate: event.target.value,
+                      }))
+                    }
+                    type="date"
+                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+                  />
+                </label>
+              </div>
+              {positionError ? <p className="text-xs text-rose-400">{positionError}</p> : null}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closePositionModal}
+                  className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-slate-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+                >
+                  Save changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }

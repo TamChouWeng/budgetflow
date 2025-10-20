@@ -118,9 +118,9 @@ export const seedHoldings = [
   },
   {
     "id": "holding-13",
-    "category": "investment",
-    "name": "Other",
-    "symbol": "OTHER",
+    "category": "other",
+    "name": "Buy Gold",
+    "symbol": "GOLD999",
     "quantity": 1,
     "avgCost": 4850,
     "holdingCurrency": "MYR",
@@ -415,10 +415,10 @@ export const seedTransactions = [
   {
     "id": "txn-33",
     "date": "2025-08-24T00:00:00.000Z",
-    "name": "Other",
+    "name": "Buy Gold",
     "description": "Buy Gold - 999 Gold 10gram",
     "currency": "MYR",
-    "category": "investment",
+    "category": "other",
     "subcategory": "Buy Gold",
     "amount": 4850
   },

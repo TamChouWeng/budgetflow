@@ -19,7 +19,6 @@ const categoryColors: Record<string, string> = {
   fixedDeposit: '#38bdf8',
   business: '#facc15',
   epf: '#f472b6',
-  investment: '#14b8a6',
   other: '#c084fc',
   property: '#fbbf24',
 }

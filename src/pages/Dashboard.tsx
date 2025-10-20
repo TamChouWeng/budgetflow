@@ -69,7 +69,6 @@ const DashboardPage = () => {
       | 'indexFund'
       | 'reit'
       | 'fixedDeposit'
-      | 'investment'
       | 'property'
       | 'other'
       | 'epf'
@@ -81,7 +80,6 @@ const DashboardPage = () => {
       indexFund: 0,
       reit: 0,
       fixedDeposit: 0,
-      investment: spendTotals.investment,
       property: spendTotals.property,
       other: spendTotals.other,
       epf: spendTotals.epf,
@@ -111,7 +109,6 @@ const DashboardPage = () => {
       { category: 'reit', value: totals.reit },
       { category: 'fixedDeposit', value: totals.fixedDeposit },
       { category: 'property', value: totals.property },
-      { category: 'investment', value: totals.investment, label: 'Other' },
       { category: 'other', value: totals.other },
       { category: 'epf', value: totals.epf },
       { category: 'business', value: totals.business },
