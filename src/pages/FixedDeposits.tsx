@@ -198,8 +198,6 @@ const FixedDepositsPage = () => {
     })
   }
 
-  const [viewMode, setViewMode] = useState<'bank' | 'deposit'>('bank')
-
   const rows = useMemo(
     () =>
       fixedDeposits.map((position) => ({
@@ -239,40 +237,20 @@ const FixedDepositsPage = () => {
 
   const allocationData = useMemo(() => {
     if (rows.length === 0) return []
-    if (viewMode === 'bank') {
-      const bankMap = new Map<string, number>()
-      rows.forEach(({ position, accrual }) => {
-        bankMap.set(
-          position.bank,
-          (bankMap.get(position.bank) ?? 0) + accrual.currentValueBase,
-        )
-      })
-      const items = Array.from(bankMap.entries()).map(([bank, value]) => ({
-        category: bank,
-        label: bank,
-        value,
-      }))
-      return calculateAllocation(items.filter((item) => item.value > 0))
-    }
-
-    const items = rows.map(({ position, accrual }) => {
-      const name =
-        position.name && position.name.trim() && position.name.trim() !== '-'
-          ? position.name.trim()
-          : `${position.bank} (${position.id})`
-      return {
-        category: position.id,
-        label: name,
-        value: accrual.currentValueBase,
-      }
+    const bankMap = new Map<string, number>()
+    rows.forEach(({ position, accrual }) => {
+      bankMap.set(
+        position.bank,
+        (bankMap.get(position.bank) ?? 0) + accrual.currentValueBase,
+      )
     })
+    const items = Array.from(bankMap.entries()).map(([bank, value]) => ({
+      category: bank,
+      label: bank,
+      value,
+    }))
     return calculateAllocation(items.filter((item) => item.value > 0))
-  }, [rows, viewMode])
-
-  const viewOptions: Array<{ value: typeof viewMode; label: string }> = [
-    { value: 'bank', label: 'By bank' },
-    { value: 'deposit', label: 'By deposit' },
-  ]
+  }, [rows])
 
   return (
     <section className="space-y-8">
@@ -378,31 +356,16 @@ const FixedDepositsPage = () => {
           </form>
         </div>
         <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
-          <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-white">Allocation snapshot</h2>
-              <p className="text-sm text-slate-400">
-                Current value in {settings.baseCurrency} grouped by{' '}
-                {viewMode === 'bank' ? 'bank' : 'individual deposit'}.
-              </p>
-            </div>
-            <div className="flex flex-col gap-1 text-right lg:text-left">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">View</span>
-              <select
-                value={viewMode}
-                onChange={(event) => setViewMode(event.target.value as typeof viewMode)}
-                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-              >
-                {viewOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+        <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Allocation snapshot</h2>
+            <p className="text-sm text-slate-400">
+              Current value in {settings.baseCurrency} grouped by bank.
+            </p>
           </div>
-          <AllocationPie data={allocationData} currency={settings.baseCurrency} />
         </div>
+        <AllocationPie data={allocationData} currency={settings.baseCurrency} />
+      </div>
       </div>
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
         <h2 className="text-lg font-semibold text-white">Positions</h2>
