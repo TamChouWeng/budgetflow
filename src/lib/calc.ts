@@ -298,5 +298,30 @@ export const sumPropertyByName = (
     .sort((a, b) => b.value - a.value)
 }
 
+export interface CategoryBreakdownRow {
+  name: string
+  value: number
+  count: number
+}
+
+export const sumTransactionsBySubcategory = (
+  transactions: Transaction[],
+  range: DateRange,
+  baseCurrency: Currency,
+  fxRates: Record<string, FxRate>,
+  category: Category,
+): CategoryBreakdownRow[] => {
+  const summary = new Map<string, CategoryBreakdownRow>()
+  transactions.forEach((transaction) => {
+    if (transaction.category !== category) return
+    if (!isWithinRange(transaction.date, range)) return
+    const key = transaction.subcategory ?? transaction.name ?? category
+    const current = summary.get(key) ?? { name: key, value: 0, count: 0 }
+    const amount = convertCurrency(transaction.amount, transaction.currency, baseCurrency, fxRates)
+    summary.set(key, { name: key, value: current.value + amount, count: current.count + 1 })
+  })
+  return Array.from(summary.values()).sort((a, b) => b.value - a.value)
+}
+
 
 

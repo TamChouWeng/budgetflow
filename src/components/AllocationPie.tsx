@@ -72,6 +72,30 @@ const AllocationPie = ({ data, currency }: AllocationPieProps) => {
   }))
   const bullet = '\u00B7'
 
+  const dynamicColorMap = new Map<string, string>()
+  const fallbackPalette = [
+    '#38bdf8',
+    '#f472b6',
+    '#22d3ee',
+    '#a855f7',
+    '#f97316',
+    '#22c55e',
+    '#eab308',
+    '#facc15',
+    '#14b8a6',
+    '#fb7185',
+  ]
+  let fallbackIndex = 0
+  chartData.forEach((entry) => {
+    if (!categoryColors[entry.category] && !dynamicColorMap.has(entry.category)) {
+      dynamicColorMap.set(entry.category, fallbackPalette[fallbackIndex % fallbackPalette.length])
+      fallbackIndex += 1
+    }
+  })
+
+  const resolveColor = (category: string) =>
+    categoryColors[category] ?? dynamicColorMap.get(category) ?? '#38bdf8'
+
   const legendFormatter: LegendProps['formatter'] = (value, entry) => {
     const payload = (entry as { payload?: ChartSlice })?.payload
     const displayLabel = payload?.label
@@ -103,7 +127,7 @@ const AllocationPie = ({ data, currency }: AllocationPieProps) => {
           >
             {chartData.map((entry) => {
               const key = `${entry.category}-${entry.label ?? 'total'}`
-              const fill = categoryColors[entry.category] ?? '#38bdf8'
+              const fill = resolveColor(entry.category)
               return (
                 <Cell
                   key={key}

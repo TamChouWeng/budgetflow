@@ -2,13 +2,13 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
-import { createFixedDeposit, createHolding, createTransaction, useBudgetStore } from '../../lib/datastore'
+import { createHolding, createTransaction, useBudgetStore } from '../../lib/datastore'
 import { normalizeSymbol } from '../../lib/vendor'
 import type { Category, Holding } from '../../types/models'
 
 const investmentSchema = z
   .object({
-  type: z.enum(['stocks', 'crypto', 'indexFund', 'reit', 'fixedDeposit', 'epf', 'other']),
+  type: z.enum(['stocks', 'crypto', 'indexFund', 'reit', 'epf', 'other']),
     name: z.string().min(1, 'Name is required'),
     symbol: z
       .string()
@@ -29,16 +29,6 @@ const investmentSchema = z
       .optional(),
     currency: z.enum(['MYR', 'USD']),
     date: z.string().min(1, 'Date is required'),
-    bank: z
-      .string()
-      .transform((value) => value.trim())
-      .optional(),
-    ratePct: z
-      .string()
-      .transform((value) => value.trim())
-      .optional(),
-    startDate: z.string().optional(),
-    maturityDate: z.string().optional(),
     notes: z
       .string()
       .transform((value) => value.trim())
@@ -62,46 +52,15 @@ const investmentSchema = z
       }
     }
 
-    if (values.type === 'fixedDeposit') {
-      if (!values.bank) {
-        ctx.addIssue({
-          path: ['bank'],
-          code: z.ZodIssueCode.custom,
-          message: 'Bank is required for fixed deposit',
-        })
-      }
-      if (!values.ratePct) {
-        ctx.addIssue({
-          path: ['ratePct'],
-          code: z.ZodIssueCode.custom,
-          message: 'Rate is required',
-        })
-      }
-      if (!values.startDate || !values.maturityDate) {
-        ctx.addIssue({
-          path: ['startDate'],
-          code: z.ZodIssueCode.custom,
-          message: 'Start and maturity dates are required',
-        })
-      }
-      if (!values.amount) {
-        ctx.addIssue({
-          path: ['amount'],
-          code: z.ZodIssueCode.custom,
-          message: 'Principal amount is required',
-        })
-      }
-    } else {
-      const hasAmount = values.amount && !Number.isNaN(Number(values.amount))
-      const hasQuantity = values.quantity && !Number.isNaN(Number(values.quantity))
-      const hasPrice = values.pricePerUnit && !Number.isNaN(Number(values.pricePerUnit))
-      if (!hasAmount && !(hasQuantity && hasPrice)) {
-        ctx.addIssue({
-          path: ['amount'],
-          code: z.ZodIssueCode.custom,
-          message: 'Provide an amount or (quantity × price)',
-        })
-      }
+    const hasAmount = values.amount && !Number.isNaN(Number(values.amount))
+    const hasQuantity = values.quantity && !Number.isNaN(Number(values.quantity))
+    const hasPrice = values.pricePerUnit && !Number.isNaN(Number(values.pricePerUnit))
+    if (!hasAmount && !(hasQuantity && hasPrice)) {
+      ctx.addIssue({
+        path: ['amount'],
+        code: z.ZodIssueCode.custom,
+        message: 'Provide an amount or (quantity � price)',
+      })
     }
   })
 
@@ -112,7 +71,6 @@ const typeLabels: Record<InvestmentFormValues['type'], string> = {
   crypto: 'Crypto',
   indexFund: 'Index Fund',
   reit: 'REIT',
-  fixedDeposit: 'Fixed Deposit',
   epf: 'EPF',
   other: 'Other',
 }
@@ -127,10 +85,6 @@ const defaultValues: InvestmentFormValues = {
   pricePerUnit: '',
   currency: 'MYR',
   date: new Date().toISOString().slice(0, 10),
-  bank: '',
-  ratePct: '',
-  startDate: '',
-  maturityDate: '',
   notes: '',
 }
 
@@ -141,7 +95,6 @@ const AddInvestmentForm = () => {
   const addHolding = useBudgetStore((state) => state.addHolding)
   const updateHolding = useBudgetStore((state) => state.updateHolding)
   const addTransaction = useBudgetStore((state) => state.addTransaction)
-  const addFixedDeposit = useBudgetStore((state) => state.addFixedDeposit)
   const [status, setStatus] = useState<{ type: 'idle' | 'saved' | 'error'; message?: string }>({
     type: 'idle',
   })
@@ -194,19 +147,9 @@ const AddInvestmentForm = () => {
     })
     addTransaction(transaction)
 
-    if (values.type === 'fixedDeposit') {
-      addFixedDeposit(
-        createFixedDeposit({
-          bank: values.bank ?? 'Unnamed Bank',
-          name: values.name,
-          principal: targetAmount,
-          ratePct: Number(values.ratePct),
-          startDate: values.startDate ?? values.date,
-          maturityDate: values.maturityDate ?? values.date,
-          currency: values.currency,
-        }),
-      )
-    } else {
+    const holdingEligible = ['stocks', 'crypto', 'indexFund', 'reit'].includes(values.type)
+
+    if (holdingEligible) {
       const { symbol, exchange } = normalizeSymbol(values.symbol ?? values.name)
       const holdingKey = symbol ?? values.name.toUpperCase()
       const normalizedKey = holdingKey.trim().toUpperCase()
@@ -220,9 +163,7 @@ const AddInvestmentForm = () => {
         return
       }
 
-      const avgCost =
-        parsedPrice ??
-        (parsedQuantity ? Number((targetAmount / parsedQuantity).toFixed(4)) : targetAmount)
+      const avgCost = parsedPrice ?? Number((targetAmount / parsedQuantity).toFixed(4))
 
       if (existing) {
         if (existing.holdingCurrency !== values.currency) {
@@ -243,10 +184,7 @@ const AddInvestmentForm = () => {
       } else {
         addHolding(
           createHolding({
-            category: values.type as Exclude<
-              Category,
-              'business' | 'fixedDeposit' | 'epf' | 'property'
-            >,
+            category: values.type as Extract<Category, 'stocks' | 'crypto' | 'indexFund' | 'reit'>,
             name: values.name,
             symbol: normalizedKey,
             exchange: exchange ?? values.exchange ?? 'US',
@@ -258,6 +196,7 @@ const AddInvestmentForm = () => {
         )
       }
     }
+
 
     reset(defaultValues)
     setStatus({ type: 'saved' })
@@ -342,37 +281,6 @@ const AddInvestmentForm = () => {
               </select>
             </label>
           </>
-        ) : selectedType === 'fixedDeposit' ? (
-          <>
-            <label className="flex flex-col gap-2 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Bank
-              </span>
-              <input
-                {...register('bank')}
-                placeholder="Bank Negara"
-                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-              />
-              {errors.bank ? (
-                <span className="text-xs text-rose-400">{errors.bank.message}</span>
-              ) : null}
-            </label>
-            <label className="flex flex-col gap-2 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Rate (% per year)
-              </span>
-              <input
-                {...register('ratePct')}
-                type="number"
-                step="0.01"
-                placeholder="3.30"
-                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-              />
-              {errors.ratePct ? (
-                <span className="text-xs text-rose-400">{errors.ratePct.message}</span>
-              ) : null}
-            </label>
-          </>
         ) : null}
         <label className="flex flex-col gap-2 text-sm">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -389,7 +297,7 @@ const AddInvestmentForm = () => {
             <span className="text-xs text-rose-400">{errors.amount.message}</span>
           ) : null}
         </label>
-        {selectedType !== 'fixedDeposit' ? (
+        {showSecurityFields ? (
           <>
             <label className="flex flex-col gap-2 text-sm">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -433,30 +341,6 @@ const AddInvestmentForm = () => {
             className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
           />
         </label>
-        {selectedType === 'fixedDeposit' ? (
-          <>
-            <label className="flex flex-col gap-2 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Start date
-              </span>
-              <input
-                {...register('startDate')}
-                type="date"
-                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-              />
-            </label>
-            <label className="flex flex-col gap-2 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Maturity date
-              </span>
-              <input
-                {...register('maturityDate')}
-                type="date"
-                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-              />
-            </label>
-          </>
-        ) : null}
       </div>
       <label className="flex flex-col gap-2 text-sm">
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">

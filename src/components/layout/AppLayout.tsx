@@ -45,14 +45,14 @@ const navItems: NavItem[] = [
     icon: Landmark,
   },
   {
-    to: '/settings',
-    label: 'Settings',
-    icon: SettingsIcon,
-  },
-  {
     to: '/data',
     label: 'Data',
     icon: Database,
+  },
+  {
+    to: '/settings',
+    label: 'Settings',
+    icon: SettingsIcon,
   },
 ]
 

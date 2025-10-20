@@ -9,14 +9,28 @@ import {
   calculateAllocation,
   calculateFixedDepositAccrual,
   enrichHoldings,
+  summarizeBusinessBySubcategory,
+
   sumTransactionsByCategory,
+  sumTransactionsBySubcategory,
 } from '../lib/calc'
 import { useBudgetStore } from '../lib/datastore'
 import { formatCurrency, formatPercent } from '../lib/format'
 import AllocationPie from '../components/AllocationPie'
 import type { HoldingWithMetrics } from '../lib/calc'
-import type { PriceQuote } from '../types/models'
+import type { PriceQuote, Category } from '../types/models'
 const BASE_PATH = '/.netlify/functions'
+
+type AllocationView =
+  | 'summary'
+  | 'stocks'
+  | 'crypto'
+  | 'indexFund'
+  | 'reit'
+  | 'investment'
+  | 'other'
+  | 'epf'
+  | 'business'
 
 const InvestmentsPage = () => {
   const holdings = useBudgetStore((state) => state.holdings)
@@ -27,6 +41,7 @@ const InvestmentsPage = () => {
   const settings = useBudgetStore((state) => state.settings)
   const recordQuotes = useBudgetStore((state) => state.recordQuotes)
   const { range, setRange } = useDateRange()
+  const [allocationView, setAllocationView] = useState<AllocationView>('summary')
 
   const symbols = useMemo(() => holdings.map((holding) => holding.symbol), [holdings])
   const { isFetching, refetch } = usePrices(symbols, {
@@ -38,6 +53,7 @@ const InvestmentsPage = () => {
     () => enrichHoldings(holdings, priceQuotes, settings.baseCurrency, fxRates),
     [holdings, priceQuotes, settings.baseCurrency, fxRates],
   )
+
 
   const [refreshingIds, setRefreshingIds] = useState<string[]>([])
 
@@ -64,7 +80,7 @@ const InvestmentsPage = () => {
   }
 
   
-  const allocation = useMemo(() => {
+  const summaryAllocation = useMemo(() => {
     const spendTotals = sumTransactionsByCategory(
       transactions,
       range,
@@ -123,7 +139,81 @@ const InvestmentsPage = () => {
     ]
 
     return calculateAllocation(items.filter((item) => item.value > 0))
-  }, [transactions, range, settings.baseCurrency, fxRates, enrichedHoldings, fixedDeposits])  const transactionsInRange = useMemo(
+  }, [transactions, range, settings.baseCurrency, fxRates, enrichedHoldings, fixedDeposits])
+
+  const allocationOptions: Array<{ value: AllocationView; label: string }> = [
+    { value: 'summary', label: 'Overall' },
+    { value: 'stocks', label: 'Stocks' },
+    { value: 'crypto', label: 'Crypto' },
+    { value: 'indexFund', label: 'Index Funds' },
+    { value: 'reit', label: 'REITs' },
+    { value: 'investment', label: 'Other investments' },
+    { value: 'other', label: 'Other' },
+    { value: 'epf', label: 'EPF' },
+    { value: 'business', label: 'Business' },
+  ]
+
+  const allocation = useMemo(() => {
+    if (allocationView === 'summary') {
+      return summaryAllocation
+    }
+
+    const items: { category: string; value: number; label?: string }[] = []
+    const addSlice = (category: string, value: number, label?: string) => {
+      if (value > 0) {
+        items.push({ category, value, label })
+      }
+    }
+
+    const holdingCategories: AllocationView[] = ['stocks', 'crypto', 'indexFund', 'reit']
+    if (holdingCategories.includes(allocationView)) {
+      enrichedHoldings
+        .filter((holding) => holding.category === allocationView)
+        .forEach((holding) => {
+          addSlice(holding.id, holding.metrics.marketValue, holding.name ?? holding.symbol)
+        })
+    }
+
+    if (allocationView === 'business') {
+      summarizeBusinessBySubcategory(transactions, range, settings.baseCurrency, fxRates).forEach(
+        ({ subcategory, total }) => {
+          addSlice(subcategory, total, subcategory)
+        },
+      )
+    }
+
+    const transactionCategories: AllocationView[] = ['investment', 'other', 'epf']
+    if (transactionCategories.includes(allocationView)) {
+      sumTransactionsBySubcategory(
+        transactions,
+        range,
+        settings.baseCurrency,
+        fxRates,
+        allocationView as Category,
+      ).forEach(({ name, value }) => {
+        const existingLabelMatch = items.find(
+          (item) => item.label === name || item.category === name,
+        )
+        addSlice(
+          existingLabelMatch ? `${allocationView}-tx-${name}` : name,
+          value,
+          existingLabelMatch ? `${name} (cash flow)` : name,
+        )
+      })
+    }
+
+    return calculateAllocation(items)
+  }, [
+    allocationView,
+    enrichedHoldings,
+    summaryAllocation,
+    transactions,
+    range,
+    settings.baseCurrency,
+    fxRates,
+  ])
+
+  const transactionsInRange = useMemo(
     () =>
       transactions.filter(
         (transaction) => transaction.date >= range.from && transaction.date <= range.to,
@@ -141,10 +231,28 @@ const InvestmentsPage = () => {
       <div className="grid gap-6 lg:grid-cols-2">
         <AddInvestmentForm />
         <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
-          <h2 className="text-lg font-semibold text-white">Allocation snapshot</h2>
-          <p className="text-sm text-slate-400">
-            Market value plus current fixed deposit balances in {settings.baseCurrency}.
-          </p>
+          <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Allocation snapshot</h2>
+              <p className="text-sm text-slate-400">
+                Market value in {settings.baseCurrency}. Choose a category to drill into holdings or cash flows.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1 text-right lg:text-left">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">View</span>
+              <select
+                value={allocationView}
+                onChange={(event) => setAllocationView(event.target.value as AllocationView)}
+                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+              >
+                {allocationOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
           <AllocationPie data={allocation} currency={settings.baseCurrency} />
           <ul className="mt-4 space-y-2 text-sm text-slate-200">
             {allocation.map((slice) => (
@@ -154,8 +262,7 @@ const InvestmentsPage = () => {
               >
                 <span className="font-medium capitalize">{slice.label ?? slice.category}</span>
                 <span className="text-right text-slate-300">
-                  {formatCurrency(slice.value, settings.baseCurrency)} ·{' '}
-                  {formatPercent(slice.percentage)}
+                  {formatCurrency(slice.value, settings.baseCurrency)} | {formatPercent(slice.percentage)}
                 </span>
               </li>
             ))}
