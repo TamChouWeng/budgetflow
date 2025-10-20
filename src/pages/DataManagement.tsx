@@ -16,9 +16,11 @@ const categoryOptions: Category[] = [
   'indexFund',
   'reit',
   'fixedDeposit',
+  'epf',
+  'other',
+  'property',
   'business',
 ]
-
 const emptyHoldingDraft = {
   name: '',
   symbol: '',
@@ -83,7 +85,7 @@ const DataManagementPage = () => {
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-    setImportStatus('Importing snapshotâ€¦')
+    setImportStatus('Importing snapshot...€¦')
     try {
       const imported = await importSnapshotFromFile(file)
       setImportStatus(
@@ -869,4 +871,6 @@ const DataManagementPage = () => {
 }
 
 export default DataManagementPage
+
+
 

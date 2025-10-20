@@ -5,6 +5,7 @@ import DashboardPage from '../pages/Dashboard'
 import DataManagementPage from '../pages/DataManagement'
 import FixedDepositsPage from '../pages/FixedDeposits'
 import InvestmentsPage from '../pages/Investments'
+import PropertyPage from '../pages/Property'
 import NotFoundPage from '../pages/NotFound'
 import SettingsPage from '../pages/Settings'
 
@@ -17,6 +18,7 @@ const AppRoutes = () => {
         { index: true, element: <DashboardPage /> },
         { path: 'investments', element: <InvestmentsPage /> },
         { path: 'business', element: <BusinessPage /> },
+        { path: 'property', element: <PropertyPage /> },
         { path: 'fixed-deposits', element: <FixedDepositsPage /> },
         { path: 'settings', element: <SettingsPage /> },
         { path: 'data', element: <DataManagementPage /> },

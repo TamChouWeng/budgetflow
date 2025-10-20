@@ -55,16 +55,25 @@ const DashboardPage = () => {
       ),
     [holdings, priceQuotes, transactions, range, settings, fxRates],
   )
-
-  const allocationSource = useMemo(() => {
+  const allocation = useMemo(() => {
     const spendTotals = sumTransactionsByCategory(
       transactions,
       range,
       settings.baseCurrency,
       fxRates,
     )
+
     const totals: Record<
-      'stocks' | 'crypto' | 'indexFund' | 'reit' | 'fixedDeposit' | 'business',
+      | 'stocks'
+      | 'crypto'
+      | 'indexFund'
+      | 'reit'
+      | 'fixedDeposit'
+      | 'investment'
+      | 'property'
+      | 'other'
+      | 'epf'
+      | 'business',
       number
     > = {
       stocks: 0,
@@ -72,11 +81,20 @@ const DashboardPage = () => {
       indexFund: 0,
       reit: 0,
       fixedDeposit: 0,
+      investment: spendTotals.investment,
+      property: spendTotals.property,
+      other: spendTotals.other,
+      epf: spendTotals.epf,
       business: spendTotals.business,
     }
+
     enrichedHoldings.forEach((holding) => {
-      totals[holding.category] += holding.metrics.marketValue
+      if (holding.category in totals) {
+        const key = holding.category as keyof typeof totals
+        totals[key] += holding.metrics.marketValue
+      }
     })
+
     fixedDeposits.forEach((position) => {
       const fd = calculateFixedDepositAccrual(
         position,
@@ -85,13 +103,22 @@ const DashboardPage = () => {
       )
       totals.fixedDeposit += fd.currentValueBase
     })
-    return totals
-  }, [transactions, range, settings.baseCurrency, fxRates, enrichedHoldings, fixedDeposits])
 
-  const allocation = useMemo(
-    () => calculateAllocation(allocationSource),
-    [allocationSource],
-  )
+    const items = [
+      { category: 'stocks', value: totals.stocks },
+      { category: 'crypto', value: totals.crypto },
+      { category: 'indexFund', value: totals.indexFund },
+      { category: 'reit', value: totals.reit },
+      { category: 'fixedDeposit', value: totals.fixedDeposit },
+      { category: 'property', value: totals.property },
+      { category: 'investment', value: totals.investment, label: 'Other' },
+      { category: 'other', value: totals.other },
+      { category: 'epf', value: totals.epf },
+      { category: 'business', value: totals.business },
+    ]
+
+    return calculateAllocation(items.filter((item) => item.value > 0))
+  }, [transactions, range, settings.baseCurrency, fxRates, enrichedHoldings, fixedDeposits])
 
   return (
     <section className="space-y-8">
@@ -203,3 +230,8 @@ const DashboardPage = () => {
 }
 
 export default DashboardPage
+
+
+
+
+

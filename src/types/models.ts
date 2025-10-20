@@ -6,6 +6,10 @@ export type Category =
   | 'indexFund'
   | 'reit'
   | 'fixedDeposit'
+  | 'epf'
+  | 'investment'
+  | 'other'
+  | 'property'
   | 'business'
 
 export interface DateRange {
@@ -18,36 +22,36 @@ export interface Transaction {
   id: string
   date: string // ISO
   category: Category
-  name?: string
-  subcategory?: string
+  name?: string // user-friendly name of the investment/expense
+  subcategory?: string // optional user-defined label
   description?: string
-  amount: number
-  currency: Currency
+  amount: number // positive amount spent or invested
+  currency: Currency // currency of the transaction
   tags?: string[]
   accountId?: string
 }
 
 export interface Holding {
   id: string
-  category: Exclude<Category, 'business' | 'fixedDeposit'>
-  name?: string
-  symbol: string
-  exchange?: string
+  category: Exclude<Category, 'business' | 'fixedDeposit' | 'epf' | 'property'>
+  name?: string // e.g., "Apple Inc.", "Bitcoin"
+  symbol: string // e.g., AAPL, 1155:MYX, SPY
+  exchange?: string // e.g., US, MYX
   quantity: number
-  avgCost: number
-  holdingCurrency: Currency
+  avgCost: number // in holdingCurrency
+  holdingCurrency: Currency // USD or MYR
   notes?: string
-  lastQuote?: PriceQuote
+  lastQuote?: PriceQuote // optional cached quote for quick UI
 }
 
 export interface FixedDepositPosition {
   id: string
   bank: string
-  name?: string
+  name?: string // user label for this FD
   principal: number
-  ratePct: number
-  startDate: string
-  maturityDate: string
+  ratePct: number // yearly
+  startDate: string // ISO
+  maturityDate: string // ISO
   currency: Currency
 }
 
@@ -55,25 +59,26 @@ export interface PriceQuote {
   symbol: string
   price: number
   currency: Currency
-  asOf: string
+  asOf: string // ISO timestamp
 }
 
 export interface FxRate {
   base: Currency
   quote: Currency
-  rate: number
+  rate: number // multiply base to get quote
   asOf: string
 }
 
 export interface InvestmentInput {
+  // Unified "Add Investment" form payload
   type: Exclude<Category, 'business'>
-  name: string
-  symbol?: string
-  amount?: number
-  quantity?: number
-  pricePerUnit?: number
-  currency: Currency
-  date: string
+  name: string // e.g., "AAPL", "Bitcoin", "Axis REIT", "FD at Bank A"
+  symbol?: string // required for stocks; optional otherwise
+  amount?: number // for non-stock investments or when tracking lump-sum
+  quantity?: number // required for stocks; optional for others
+  pricePerUnit?: number // optional helper; derive avgCost = amount/quantity when provided
+  currency: Currency // MYR or USD
+  date: string // ISO date of the transaction or placement
 }
 
 export type ThemeMode = 'light' | 'dark'

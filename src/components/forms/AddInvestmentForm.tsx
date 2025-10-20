@@ -4,11 +4,11 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { createFixedDeposit, createHolding, createTransaction, useBudgetStore } from '../../lib/datastore'
 import { normalizeSymbol } from '../../lib/vendor'
-import type { Holding } from '../../types/models'
+import type { Category, Holding } from '../../types/models'
 
 const investmentSchema = z
   .object({
-    type: z.enum(['stocks', 'crypto', 'indexFund', 'reit', 'fixedDeposit']),
+  type: z.enum(['stocks', 'crypto', 'indexFund', 'reit', 'fixedDeposit', 'epf', 'other']),
     name: z.string().min(1, 'Name is required'),
     symbol: z
       .string()
@@ -62,18 +62,7 @@ const investmentSchema = z
       }
     }
 
-    if (values.type !== 'fixedDeposit') {
-      const hasAmount = values.amount && !Number.isNaN(Number(values.amount))
-      const hasQuantity = values.quantity && !Number.isNaN(Number(values.quantity))
-      const hasPrice = values.pricePerUnit && !Number.isNaN(Number(values.pricePerUnit))
-      if (!hasAmount && !(hasQuantity && hasPrice)) {
-        ctx.addIssue({
-          path: ['amount'],
-          code: z.ZodIssueCode.custom,
-          message: 'Provide an amount or (quantity × price)',
-        })
-      }
-    } else {
+    if (values.type === 'fixedDeposit') {
       if (!values.bank) {
         ctx.addIssue({
           path: ['bank'],
@@ -102,6 +91,17 @@ const investmentSchema = z
           message: 'Principal amount is required',
         })
       }
+    } else {
+      const hasAmount = values.amount && !Number.isNaN(Number(values.amount))
+      const hasQuantity = values.quantity && !Number.isNaN(Number(values.quantity))
+      const hasPrice = values.pricePerUnit && !Number.isNaN(Number(values.pricePerUnit))
+      if (!hasAmount && !(hasQuantity && hasPrice)) {
+        ctx.addIssue({
+          path: ['amount'],
+          code: z.ZodIssueCode.custom,
+          message: 'Provide an amount or (quantity × price)',
+        })
+      }
     }
   })
 
@@ -113,6 +113,8 @@ const typeLabels: Record<InvestmentFormValues['type'], string> = {
   indexFund: 'Index Fund',
   reit: 'REIT',
   fixedDeposit: 'Fixed Deposit',
+  epf: 'EPF',
+  other: 'Other',
 }
 
 const defaultValues: InvestmentFormValues = {
@@ -156,6 +158,7 @@ const AddInvestmentForm = () => {
   })
 
   const selectedType = watch('type')
+  const showSecurityFields = ['stocks', 'crypto', 'indexFund', 'reit'].includes(selectedType)
 
   const holdingsIndex = useMemo(() => {
     const map = new Map<string, Holding>()
@@ -240,7 +243,10 @@ const AddInvestmentForm = () => {
       } else {
         addHolding(
           createHolding({
-            category: values.type,
+            category: values.type as Exclude<
+              Category,
+              'business' | 'fixedDeposit' | 'epf' | 'property'
+            >,
             name: values.name,
             symbol: normalizedKey,
             exchange: exchange ?? values.exchange ?? 'US',
@@ -308,7 +314,7 @@ const AddInvestmentForm = () => {
           />
           {errors.name ? <span className="text-xs text-rose-400">{errors.name.message}</span> : null}
         </label>
-        {selectedType !== 'fixedDeposit' ? (
+        {showSecurityFields ? (
           <>
             <label className="flex flex-col gap-2 text-sm">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -336,7 +342,7 @@ const AddInvestmentForm = () => {
               </select>
             </label>
           </>
-        ) : (
+        ) : selectedType === 'fixedDeposit' ? (
           <>
             <label className="flex flex-col gap-2 text-sm">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -367,7 +373,7 @@ const AddInvestmentForm = () => {
               ) : null}
             </label>
           </>
-        )}
+        ) : null}
         <label className="flex flex-col gap-2 text-sm">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             Amount ({watch('currency')})
@@ -490,3 +496,4 @@ const AddInvestmentForm = () => {
 }
 
 export default AddInvestmentForm
+

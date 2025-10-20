@@ -1,0 +1,21 @@
+*** Begin Patch
+*** Update File: src/lib/calc.ts
+@@
+ export const sumTransactionsByCategory = (
+   transactions: Transaction[],
+   range: DateRange,
+   baseCurrency: Currency,
+   fxRates: Record<string, FxRate>,
+ ) => {
+   const summary: Record<Category, number> = {
+     stocks: 0,
+     crypto: 0,
+     indexFund: 0,
+     reit: 0,
+     fixedDeposit: 0,
+     epf: 0,
++    other: 0,
++    property: 0,
+     business: 0,
+   }
+*** End Patch

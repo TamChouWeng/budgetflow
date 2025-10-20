@@ -18,7 +18,21 @@ const categoryColors: Record<string, string> = {
   reit: '#a855f7',
   fixedDeposit: '#38bdf8',
   business: '#facc15',
+  epf: '#f472b6',
+  investment: '#14b8a6',
+  other: '#c084fc',
+  property: '#fbbf24',
 }
+
+const formatCategoryName = (value: string) =>
+  value
+    .replace(/([A-Z])/g, ' $1')
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+
+type ChartSlice = AllocationSlice & { displayName: string }
 
 interface AllocationPieProps {
   data: AllocationSlice[]
@@ -31,16 +45,20 @@ const CustomTooltip = ({
   currency,
 }: {
   active?: boolean
-  payload?: Array<{ value: number; payload: AllocationSlice }>
+  payload?: Array<{ value: number; payload: ChartSlice }>
   currency: Currency
 }) => {
   if (!active || !payload || payload.length === 0) return null
   const item = payload[0].payload
+  const displayName =
+    item.label ??
+    (typeof item.displayName === 'string' ? item.displayName : formatCategoryName(item.category))
+  const bullet = '\u00B7'
   return (
     <div className="rounded-xl border border-slate-800/80 bg-slate-900/90 px-4 py-3 text-sm text-slate-100 shadow-xl">
-      <p className="font-semibold capitalize">{item.category}</p>
+      <p className="font-semibold capitalize">{displayName}</p>
       <p className="text-slate-300">
-        {formatCurrency(item.value, currency)} · {formatPercent(item.percentage)}
+        {formatCurrency(item.value, currency)} {' '} {bullet} {' '} {formatPercent(item.percentage)}
       </p>
     </div>
   )
@@ -48,17 +66,19 @@ const CustomTooltip = ({
 
 const AllocationPie = ({ data, currency }: AllocationPieProps) => {
   const empty = data.every((item) => item.value === 0)
-  const chartData = data.map((item) => ({ ...item })) as Array<Record<string, string | number>>
+  const chartData: ChartSlice[] = data.map((item) => ({
+    ...item,
+    displayName: item.label ?? formatCategoryName(item.category),
+  }))
+  const bullet = '\u00B7'
 
   const legendFormatter: LegendProps['formatter'] = (value, entry) => {
-    const label =
-      typeof value === 'string' ? value.replace(/([A-Z])/g, ' $1').trim() : value
-    const payload = (entry as { payload?: AllocationSlice })?.payload
-    const percentage =
-      payload && typeof payload.percentage === 'number'
-        ? ` · ${formatPercent(payload.percentage)}`
-        : ''
-    return `${label}${percentage}`
+    const payload = (entry as { payload?: ChartSlice })?.payload
+    const displayLabel = payload?.label
+      ?? payload?.displayName
+      ?? (typeof value === 'string' ? value : String(value))
+    const percentageText = payload ? ` ${bullet} ${formatPercent(payload.percentage)}` : ''
+    return `${displayLabel}${percentageText}`
   }
 
   if (empty) {
@@ -74,20 +94,24 @@ const AllocationPie = ({ data, currency }: AllocationPieProps) => {
       <ResponsiveContainer>
         <PieChart>
           <Pie
-            data={chartData}
+            data={chartData as unknown as Array<Record<string, string | number>>}
             dataKey="value"
-            nameKey="category"
+            nameKey="displayName"
             innerRadius={70}
             paddingAngle={4}
             stroke="#0f172a"
           >
-            {data.map((entry) => (
-              <Cell
-                key={entry.category}
-                fill={categoryColors[entry.category] ?? '#38bdf8'}
-                stroke="rgba(15, 23, 42, 0.6)"
-              />
-            ))}
+            {chartData.map((entry) => {
+              const key = `${entry.category}-${entry.label ?? 'total'}`
+              const fill = categoryColors[entry.category] ?? '#38bdf8'
+              return (
+                <Cell
+                  key={key}
+                  fill={fill}
+                  stroke="rgba(15, 23, 42, 0.6)"
+                />
+              )
+            })}
           </Pie>
           <Tooltip content={<CustomTooltip currency={currency} />} />
           <Legend iconType="circle" formatter={legendFormatter} wrapperStyle={{ color: '#cbd5f5' }} />

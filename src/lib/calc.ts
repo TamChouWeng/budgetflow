@@ -97,6 +97,10 @@ export const sumTransactionsByCategory = (
     indexFund: 0,
     reit: 0,
     fixedDeposit: 0,
+    epf: 0,
+    investment: 0,
+    other: 0,
+    property: 0,
     business: 0,
   }
   transactions.forEach((tx) => {
@@ -106,24 +110,24 @@ export const sumTransactionsByCategory = (
   return summary
 }
 
-export interface AllocationSlice {
-  category: Category
+export interface AllocationInput {
+  category: string
   value: number
+  label?: string
+}
+
+export interface AllocationSlice extends AllocationInput {
   percentage: number
 }
 
 export const calculateAllocation = (
-  totals: Record<Category, number>,
+  inputs: AllocationInput[],
 ): AllocationSlice[] => {
-  const aggregate = Object.entries(totals).map(([category, value]) => ({
-    category: category as Category,
-    value,
-  }))
-  const sum = aggregate.reduce((acc, item) => acc + item.value, 0)
+  const sum = inputs.reduce((acc, item) => acc + item.value, 0)
   if (sum === 0) {
-    return aggregate.map((item) => ({ ...item, percentage: 0 }))
+    return inputs.map((item) => ({ ...item, percentage: 0 }))
   }
-  return aggregate.map((item) => ({
+  return inputs.map((item) => ({
     ...item,
     percentage: item.value / sum,
   }))
@@ -262,3 +266,37 @@ export const summarizeBusinessBySubcategory = (
   })
   return Array.from(summary.values()).sort((a, b) => b.total - a.total)
 }
+
+
+
+export interface PropertyAllocationRow {
+  name: string
+  value: number
+}
+
+export const sumPropertyByName = (
+  transactions: Transaction[],
+  range: DateRange,
+  baseCurrency: Currency,
+  fxRates: Record<string, FxRate>,
+): PropertyAllocationRow[] => {
+  const summary = new Map<string, number>()
+  transactions.forEach((transaction) => {
+    if (transaction.category !== 'property') return
+    if (!isWithinRange(transaction.date, range)) return
+    const key = transaction.subcategory ?? transaction.name ?? 'Property'
+    const amount = convertCurrency(
+      transaction.amount,
+      transaction.currency,
+      baseCurrency,
+      fxRates,
+    )
+    summary.set(key, (summary.get(key) ?? 0) + amount)
+  })
+  return Array.from(summary.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+}
+
+
+

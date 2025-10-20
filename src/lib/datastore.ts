@@ -12,6 +12,11 @@ import type {
 } from '../types/models'
 import { clampRangeToToday, defaultDateRange, rangeFromPreset } from './dates'
 import { toFxRecord, getFxRateKey } from './calc'
+import {
+  seedHoldings,
+  seedTransactions,
+  seedFixedDeposits,
+} from './seedData'
 
 type FileSystemWritableFileStream = {
   write: (data: string | Uint8Array) => Promise<void>
@@ -81,6 +86,15 @@ const defaultSettings: AppSettings = {
   vendor: 'twelve-data',
 }
 
+const cloneSeedHoldings = (): Holding[] =>
+  seedHoldings.map((holding) => ({ ...holding })) as Holding[]
+
+const cloneSeedTransactions = (): Transaction[] =>
+  seedTransactions.map((transaction) => ({ ...transaction })) as Transaction[]
+
+const cloneSeedFixedDeposits = (): FixedDepositPosition[] =>
+  seedFixedDeposits.map((position) => ({ ...position })) as FixedDepositPosition[]
+
 const fallbackStorage: StateStorage = {
   getItem: () => null,
   setItem: () => undefined,
@@ -99,9 +113,9 @@ const storage = createJSONStorage<BudgetState>(() => {
 export const useBudgetStore = create<BudgetState>()(
   persist<BudgetState>(
     (set) => ({
-      holdings: [],
-      transactions: [],
-      fixedDeposits: [],
+      holdings: cloneSeedHoldings(),
+      transactions: cloneSeedTransactions(),
+      fixedDeposits: cloneSeedFixedDeposits(),
       priceQuotes: {},
       fxRates: {},
       settings: defaultSettings,
@@ -191,9 +205,15 @@ export const useBudgetStore = create<BudgetState>()(
         }),
       hydrate: (snapshot) =>
         set(() => ({
-          holdings: snapshot.holdings ?? [],
-          transactions: snapshot.transactions ?? [],
-          fixedDeposits: snapshot.fixedDeposits ?? [],
+          holdings: (snapshot.holdings ?? cloneSeedHoldings()).map(
+            (holding) => ({ ...holding }) as Holding,
+          ),
+          transactions: (snapshot.transactions ?? cloneSeedTransactions()).map(
+            (transaction) => ({ ...transaction }) as Transaction,
+          ),
+          fixedDeposits: (snapshot.fixedDeposits ?? cloneSeedFixedDeposits()).map(
+            (position) => ({ ...position }) as FixedDepositPosition,
+          ),
           priceQuotes: (snapshot.priceQuotes ?? []).reduce<Record<string, PriceQuote>>(
             (acc, quote) => {
               acc[normalizeKey(quote.symbol)] = quote
@@ -207,9 +227,9 @@ export const useBudgetStore = create<BudgetState>()(
         })),
       reset: () =>
         set(() => ({
-          holdings: [],
-          transactions: [],
-          fixedDeposits: [],
+          holdings: cloneSeedHoldings(),
+          transactions: cloneSeedTransactions(),
+          fixedDeposits: cloneSeedFixedDeposits(),
           priceQuotes: {},
           fxRates: {},
           settings: defaultSettings,

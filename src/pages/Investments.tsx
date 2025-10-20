@@ -16,7 +16,6 @@ import { formatCurrency, formatPercent } from '../lib/format'
 import AllocationPie from '../components/AllocationPie'
 import type { HoldingWithMetrics } from '../lib/calc'
 import type { PriceQuote } from '../types/models'
-
 const BASE_PATH = '/.netlify/functions'
 
 const InvestmentsPage = () => {
@@ -64,19 +63,67 @@ const InvestmentsPage = () => {
     }
   }
 
+  
   const allocation = useMemo(() => {
-    const totals = sumTransactionsByCategory(transactions, range, settings.baseCurrency, fxRates)
+    const spendTotals = sumTransactionsByCategory(
+      transactions,
+      range,
+      settings.baseCurrency,
+      fxRates,
+    )
+
+    const totals: Record<
+      | 'stocks'
+      | 'crypto'
+      | 'indexFund'
+      | 'reit'
+      | 'fixedDeposit'
+      | 'investment'
+      | 'property'
+      | 'other'
+      | 'epf'
+      | 'business',
+      number
+    > = {
+      stocks: 0,
+      crypto: 0,
+      indexFund: 0,
+      reit: 0,
+      fixedDeposit: 0,
+      investment: spendTotals.investment,
+      property: spendTotals.property,
+      other: spendTotals.other,
+      epf: spendTotals.epf,
+      business: spendTotals.business,
+    }
+
     enrichedHoldings.forEach((holding) => {
-      totals[holding.category] += holding.metrics.marketValue
+      if (holding.category in totals) {
+        const key = holding.category as keyof typeof totals
+        totals[key] += holding.metrics.marketValue
+      }
     })
+
     fixedDeposits.forEach((position) => {
       const fd = calculateFixedDepositAccrual(position, settings.baseCurrency, fxRates)
       totals.fixedDeposit += fd.currentValueBase
     })
-    return calculateAllocation(totals)
-  }, [transactions, range, settings.baseCurrency, fxRates, enrichedHoldings, fixedDeposits])
 
-  const transactionsInRange = useMemo(
+    const items = [
+      { category: 'stocks', value: totals.stocks },
+      { category: 'crypto', value: totals.crypto },
+      { category: 'indexFund', value: totals.indexFund },
+      { category: 'reit', value: totals.reit },
+      { category: 'fixedDeposit', value: totals.fixedDeposit },
+      { category: 'property', value: totals.property },
+      { category: 'investment', value: totals.investment, label: 'Other' },
+      { category: 'other', value: totals.other },
+      { category: 'epf', value: totals.epf },
+      { category: 'business', value: totals.business },
+    ]
+
+    return calculateAllocation(items.filter((item) => item.value > 0))
+  }, [transactions, range, settings.baseCurrency, fxRates, enrichedHoldings, fixedDeposits])  const transactionsInRange = useMemo(
     () =>
       transactions.filter(
         (transaction) => transaction.date >= range.from && transaction.date <= range.to,
@@ -102,10 +149,10 @@ const InvestmentsPage = () => {
           <ul className="mt-4 space-y-2 text-sm text-slate-200">
             {allocation.map((slice) => (
               <li
-                key={slice.category}
+                key={`${slice.category}-${slice.label ?? 'total'}`}
                 className="flex items-center justify-between rounded-xl border border-slate-800/60 bg-slate-900/60 px-4 py-2"
               >
-                <span className="font-medium capitalize">{slice.category}</span>
+                <span className="font-medium capitalize">{slice.label ?? slice.category}</span>
                 <span className="text-right text-slate-300">
                   {formatCurrency(slice.value, settings.baseCurrency)} ·{' '}
                   {formatPercent(slice.percentage)}
@@ -177,3 +224,17 @@ const InvestmentsPage = () => {
 }
 
 export default InvestmentsPage
+
+
+
+
+
+
+
+
+
+
+
+
+
+
