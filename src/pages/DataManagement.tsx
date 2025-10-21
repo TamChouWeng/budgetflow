@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import SaveToFileButton from '../components/SaveToFileButton'
 import {
@@ -51,6 +52,8 @@ const DataManagementPage = () => {
   const [filterStartDate, setFilterStartDate] = useState('')
   const [filterEndDate, setFilterEndDate] = useState('')
   const [sortOrder, setSortOrder] = useState<'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc'>('date-desc')
+  const [rowsPerPage, setRowsPerPage] = useState(10)
+  const [currentPage, setCurrentPage] = useState(1)
 
   const snapshot = useMemo(
     () => createSnapshot(),
@@ -89,6 +92,23 @@ const DataManagementPage = () => {
     })
     return rows
   }, [filteredTransactions, sortOrder])
+
+  const totalPages = Math.max(1, Math.ceil(sortedTransactions.length / rowsPerPage))
+  const startItem = sortedTransactions.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
+  const endItem = Math.min(currentPage * rowsPerPage, sortedTransactions.length)
+
+  const paginatedTransactions = useMemo(() => {
+    const startIndex = (currentPage - 1) * rowsPerPage
+    return sortedTransactions.slice(startIndex, startIndex + rowsPerPage)
+  }, [sortedTransactions, rowsPerPage, currentPage])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [rowsPerPage, filterCategory, filterCurrency, filterStartDate, filterEndDate, searchTerm, sortOrder])
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages))
+  }, [totalPages])
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -322,13 +342,29 @@ const DataManagementPage = () => {
                     <option value="amount-asc">Amount (low to high)</option>
                   </select>
                 </label>
-                <button
-                  type="button"
-                  onClick={handleDownloadCsv}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-brand-500 hover:text-brand-200"
-                >
-                  Download CSV
-                </button>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Rows</span>
+                    <select
+                      value={rowsPerPage}
+                      onChange={(event) => setRowsPerPage(Number(event.target.value))}
+                      className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleDownloadCsv}
+                    aria-label="Download CSV"
+                    className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-900 p-2 text-sm font-semibold text-slate-100 transition hover:border-brand-500 hover:text-brand-200"
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
             {sortedTransactions.length === 0 ? (
@@ -336,8 +372,9 @@ const DataManagementPage = () => {
                 No transactions match the current filters.
               </p>
             ) : (
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-slate-800 text-sm">
+              <div className="space-y-4">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-800 text-sm">
                             <thead className="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-400">
                               <tr>
                                 <th className="px-4 py-3 font-medium">Name</th>
@@ -350,7 +387,7 @@ const DataManagementPage = () => {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/60 text-slate-200">
-                              {sortedTransactions.map((transaction) => {
+                              {paginatedTransactions.map((transaction) => {
                                 const isEditing = transactionEditId === transaction.id
                                 return (
                                   <tr key={transaction.id}>
@@ -510,7 +547,35 @@ const DataManagementPage = () => {
                             </tbody>
                           </table>
                         </div>
-
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                  <span>
+                    Showing {startItem} to {endItem} of {sortedTransactions.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                      disabled={currentPage === 1}
+                      aria-label="Previous page"
+                      className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-200 transition hover:border-brand-500 hover:text-brand-200 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <span className="font-medium text-slate-200">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                      disabled={currentPage === totalPages || sortedTransactions.length === 0}
+                      aria-label="Next page"
+                      className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-200 transition hover:border-brand-500 hover:text-brand-200 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </>
         )}
