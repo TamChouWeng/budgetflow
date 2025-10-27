@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import BackendIntegrationPanel from '../components/data/BackendIntegrationPanel'
 import SaveToFileButton from '../components/SaveToFileButton'
 import {
   createSnapshot,
@@ -207,6 +208,7 @@ const DataManagementPage = () => {
         title="Data management"
         description="Export encrypted JSON backups, import snapshots, or directly edit your stored investments."
       />
+      <BackendIntegrationPanel />
       {/* Export / Import */}
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-6 rounded-2xl border border-slate-800 bg-slate-900/40 p-6">

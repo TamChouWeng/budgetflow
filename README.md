@@ -1,78 +1,80 @@
-# Budgetflow v2 – Investment & Business Spending Tracker
+ï»¿# Budgetflow v2 - Investment & Business Spending Tracker
 
-Budgetflow v2 is a Vite + React + TypeScript application that tracks investment holdings, fixed deposits, and business expenses with live market data for MYX and US tickers. The app is optimised for Netlify hosting with serverless functions to proxy Twelve Data or EOD Historical Data APIs and persistently stores data client-side (Zustand + localStorage) with optional JSON exports.
+Budgetflow v2 is a Vite + React + TypeScript application for tracking Malaysian/US investments, fixed deposits, and business expenses. It ships with a FastAPI backend (see FastAPI/) and Netlify serverless helpers for live market data.
 
 ## Getting Started
 
-`ash
+`powershell
 npm install
 npm run dev
 `
 
 The development server runs at http://localhost:5173.
 
-### Scripts
+### Package Scripts
 
-| Command          | Description                          |
-| ---------------- | ------------------------------------ |
+| Command | Description |
+| ------- | ----------- |
 | 
-pm run dev    | Start Vite dev server                |
+pm run dev | Start Vite in dev mode |
 | 
-pm run build  | Type-check then build for production |
+pm run build | Type-check then produce a production build |
 | 
-pm run preview| Preview the production build         |
+pm run preview | Preview the production bundle |
 | 
-pm run test   | Run Vitest unit tests                |
+pm run test | Run Vitest unit tests |
 
 ## Environment Variables
 
-Netlify functions pick up API keys from environment variables. Configure these in Netlify (or a local .env file when using the Netlify CLI):
+| Variable | Purpose |
+| -------- | ------- |
+| VITE_API_URL | Optional FastAPI base URL. Defaults to http://localhost:8000. |
+| TWELVE_DATA_API_KEY | Twelve Data API key used by Netlify functions. |
+| EODHD_API_KEY | EOD Historical Data API token. |
 
-- TWELVE_DATA_API_KEY – API key for Twelve Data
-- EODHD_API_KEY – API token for EOD Historical Data
+Create a .env file or configure Netlify/hosting secrets before building for production.
 
-You can also supply a key at runtime via the Settings page; the key is sent to serverless functions and never stored in compiled client code.
+## FastAPI backend bridge
+
+1. In a second terminal run the backend:
+   `powershell
+   cd FastAPI
+   uvicorn app.main:app --reload
+   `
+2. (Optional) create VITE_API_URL=http://127.0.0.1:8000 in the front-end .env.
+3. Visit /data inside the React app. The "FastAPI data bridge" card lets you create/delete **users** and **investments** using the Excel-approved schema. Every submit immediately re-fetches from FastAPI via React Query so you can visually confirm persistence.
+4. For CLI verification, follow the tutorial in FastAPI/README.md (curl examples + Swagger links).
 
 ## Serverless Functions
 
-Located under 
+Located in 
 etlify/functions/:
 
-- price.ts – GET endpoint /.netlify/functions/price?symbol=AAPL to fetch one or more quotes.
-- prices-batch.ts – POST endpoint for batch quote refresh { symbols: ["AAPL", "1155:MYX"], vendor: "twelve-data" }.
-- x.ts – GET endpoint /.netlify/functions/fx?base=USD&quote=MYR to fetch FX rates.
+- price.ts â€“ GET /.netlify/functions/price?symbol=AAPL to fetch one or more quotes.
+- prices-batch.ts â€“ POST /.netlify/functions/prices-batch for batched quote refreshes.
+- x.ts â€“ GET /.netlify/functions/fx?base=USD&quote=MYR for FX rates.
 
-Each function caches responses in-memory (60s for US, 5 minutes for MYX) and performs exponential backoff on HTTP 429.
+Each function performs retry/backoff and minor response caching to stay within vendor limits.
 
-## Data Layer & Offline Support
+## Data layer & offline support
 
-- Zustand store with persist middleware keeps holdings, transactions, and settings in localStorage.
-- The Data page allows exporting/importing JSON snapshots via the File System Access API (with download fallback).
-- React Query powers price polling with deduped requests (usePrices, useFxRate).
+- Zustand store + persist middleware keeps holdings, transactions, and settings in localStorage.
+- /data now has three capabilities: JSON snapshot import/export, manual transaction editing, and the FastAPI bridge.
+- React Query handles all remote state (market data, FX, backend CRUD) with deduped polling.
 
 ## Testing
 
-Vitest covers the calculation utilities and vendor symbol normalisation:
-`ash
+`powershell
 npm run test
 `
 
-## Deployment Notes
+Vitest currently covers calculator utilities and vendor symbol helpers. Back-end tests live under FastAPI/tests (run with python -m pytest).
+
+## Deployment notes
 
 - 
-etlify.toml already points Netlify to dist and the functions directory, using the esbuild bundler.
-- public/_redirects ensures SPA routing (/* /index.html 200).
-- Adjust ite.config.ts or Netlify build settings if you need a different base path.
+etlify.toml points to dist/ and bundles the serverless functions.
+- public/_redirects keeps SPA routing working on Netlify.
+- For production FastAPI deployments, review the guidance in FastAPI/README.md (CORS, Gunicorn, database backups).
 
-## Folder Structure Highlights
-
-`
-src/
-  components/      UI components (forms, tables, charts)
-  hooks/           Custom hooks for settings, date ranges, prices
-  lib/             Core logic (calc, datastore, vendor helpers)
-  pages/           Routed pages (Dashboard, Investments, Business, etc.)
-netlify/functions/ Serverless function handlers
-`
-
-Enjoy tracking your investments and business spend with live MYX/US market data!
+Enjoy tracking your portfolio with live MYX/US market data plus a true backend for relational storage!

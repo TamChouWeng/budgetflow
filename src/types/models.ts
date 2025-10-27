@@ -111,3 +111,87 @@ export interface PriceServiceRequest {
 }
 
 export type PriceServiceResponse = PriceQuote[]
+
+export type ApiUserStatus = 'active user' | 'inactive user' | 'deleted user'
+
+export interface ApiUser {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  phone_number?: string | null
+  user_status: ApiUserStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface ApiCreateUserPayload {
+  first_name: string
+  last_name: string
+  email: string
+  password: string
+  phone_number?: string
+  user_status: ApiUserStatus
+}
+
+export type ApiInvestmentType =
+  | 'stocks'
+  | 'crypto'
+  | 'index_fund'
+  | 'reit'
+  | 'fixed_deposit'
+  | 'epf'
+  | 'property'
+  | 'business'
+  | 'other'
+
+export type ApiInvestmentStatus = 'active' | 'inactive'
+
+export interface ApiInvestment {
+  id: string
+  type: ApiInvestmentType
+  name: string
+  note?: string | null
+  status: ApiInvestmentStatus
+  unit_price: number
+  quantity: number
+  currency: Currency
+  maturity_date?: string | null
+  date: string
+  user_id: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ApiInvestmentPage {
+  total: number
+  limit: number
+  offset: number
+  items: ApiInvestment[]
+}
+
+export interface ApiCreateInvestmentPayload {
+  type: ApiInvestmentType
+  name: string
+  note?: string
+  status: ApiInvestmentStatus
+  unit_price: number
+  quantity: number
+  currency: Currency
+  maturity_date?: string
+  date: string
+  user_id: string
+}
+
+export interface ApiLogin {
+  id: string
+  ip_address: string
+  user_id: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ApiCreateLoginPayload {
+  ip_address: string
+  user_id: string
+}
